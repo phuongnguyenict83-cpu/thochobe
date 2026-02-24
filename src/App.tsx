@@ -5,10 +5,10 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, BookOpen, Baby, School, Heart, Dog, Sun, Cloud, Loader2 } from 'lucide-react';
+import { Sparkles, BookOpen, Baby, School, Heart, Dog, Sun, Cloud, Loader2, PenTool } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AgeGroup, PoemResponse } from './types';
-import { generatePoem, readPoem } from './services/gemini';
+import { generatePoem, readPoem, generatePoemImage } from './services/gemini';
 import { PoemCard } from './components/PoemCard';
 import { BlossomEffect } from './components/BlossomEffect';
 
@@ -30,8 +30,10 @@ const AGES: { id: AgeGroup; label: string }[] = [
 export default function App() {
   const [selectedTheme, setSelectedTheme] = useState(THEMES[0].id);
   const [selectedAge, setSelectedAge] = useState<AgeGroup>('3-4');
+  const [customIdea, setCustomIdea] = useState('');
   const [poem, setPoem] = useState<PoemResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const [reading, setReading] = useState(false);
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
 
@@ -44,8 +46,15 @@ export default function App() {
     }
     
     try {
-      const result = await generatePoem(selectedTheme, selectedAge);
+      const result = await generatePoem(selectedTheme, selectedAge, customIdea);
       setPoem(result);
+      
+      // Start image generation in parallel or after
+      setImageLoading(true);
+      const imageUrl = await generatePoemImage(result.content);
+      setPoem(prev => prev ? { ...prev, imageUrl: imageUrl || undefined } : null);
+      setImageLoading(false);
+
       confetti({
         particleCount: 100,
         spread: 70,
@@ -56,6 +65,7 @@ export default function App() {
       console.error(error);
     } finally {
       setLoading(false);
+      setImageLoading(false);
     }
   };
 
@@ -107,25 +117,40 @@ export default function App() {
         <section className="bg-white/80 backdrop-blur-md p-8 rounded-[40px] border border-pink-100 shadow-xl shadow-pink-100/50">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             {/* Theme Selection */}
-            <div>
-              <label className="block text-xs uppercase tracking-widest font-bold text-pink-400 mb-4 ml-2">
-                1. Chọn chủ đề
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {THEMES.map((theme) => (
-                  <button
-                    key={theme.id}
-                    onClick={() => setSelectedTheme(theme.id)}
-                    className={`flex flex-col items-center justify-center p-4 rounded-3xl transition-all ${
-                      selectedTheme === theme.id
-                        ? 'bg-pink-600 text-white shadow-lg scale-105'
-                        : 'bg-white hover:bg-pink-50 text-pink-600 border border-pink-50'
-                    }`}
-                  >
-                    <theme.icon className={`w-6 h-6 mb-2 ${selectedTheme === theme.id ? 'text-white' : ''}`} />
-                    <span className="text-xs font-bold">{theme.label}</span>
-                  </button>
-                ))}
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs uppercase tracking-widest font-bold text-pink-400 mb-4 ml-2">
+                  1. Chọn chủ đề
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {THEMES.map((theme) => (
+                    <button
+                      key={theme.id}
+                      onClick={() => setSelectedTheme(theme.id)}
+                      className={`flex flex-col items-center justify-center p-4 rounded-3xl transition-all ${
+                        selectedTheme === theme.id
+                          ? 'bg-pink-600 text-white shadow-lg scale-105'
+                          : 'bg-white hover:bg-pink-50 text-pink-600 border border-pink-50'
+                      }`}
+                    >
+                      <theme.icon className={`w-6 h-6 mb-2 ${selectedTheme === theme.id ? 'text-white' : ''}`} />
+                      <span className="text-xs font-bold">{theme.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-widest font-bold text-pink-400 mb-4 ml-2 flex items-center gap-2">
+                  <PenTool className="w-3 h-3" />
+                  3. Ý tưởng của bạn (tùy chọn)
+                </label>
+                <textarea
+                  value={customIdea}
+                  onChange={(e) => setCustomIdea(e.target.value)}
+                  placeholder="Ví dụ: Bé đi học lần đầu, bé giúp mẹ quét nhà..."
+                  className="w-full p-4 rounded-3xl border border-pink-100 bg-white/50 focus:ring-2 focus:ring-pink-200 focus:border-pink-300 outline-none transition-all text-pink-800 placeholder:text-pink-200 min-h-[100px] resize-none"
+                />
               </div>
             </div>
 
@@ -173,6 +198,7 @@ export default function App() {
             <PoemCard 
               poem={poem} 
               loading={loading} 
+              imageLoading={imageLoading}
               onRead={handleRead} 
               reading={reading}
             />
